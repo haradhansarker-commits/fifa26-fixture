@@ -1,0 +1,7 @@
+{
+  "_readme": "Add match IDs mapped to stream URLs. 'global' is the fallback shown on all live matches with no specific URL.",
+  "global": "",
+  "matches": {
+    "4": "https://www.youtube.com/watch?v=example"
+  }
+}
