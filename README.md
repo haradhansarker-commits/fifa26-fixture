@@ -6,6 +6,8 @@
 
 No backend. No API key. No database. Just open it and watch the tournament unfold.
 
+### 🔴 [**Live preview → fifa26-fixture.vercel.app**](https://fifa26-fixture.vercel.app/)
+
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
