@@ -1,18 +1,17 @@
 import { useParams, Link } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Goal, Flag as FlagIcon, RefreshCw, Square, MapPin, Tv } from "lucide-react";
 import { Flag } from "../components/Flag";
 import { PageHeader } from "../components/PageHeader";
 import { useMatchDetail, useWatchLink } from "../services/useLiveData";
-import type { MatchEvent, MatchStatLine } from "../services/liveData";
+import type { MatchEvent, MatchStatLine, LineupPlayer } from "../services/liveData";
 
-type SubTab = "lineups" | "events" | "stats" | "h2h";
+type SubTab = "lineups" | "events" | "stats";
 
 const SUBTABS: { id: SubTab; label: string }[] = [
   { id: "lineups", label: "Lineups" },
   { id: "events", label: "Events" },
   { id: "stats", label: "Stats" },
-  { id: "h2h", label: "H2H" },
 ];
 
 export function MatchDetail() {
@@ -47,7 +46,7 @@ export function MatchDetail() {
     );
   }
 
-  const { match, venue, homeFormation, awayFormation, homeLineup, awayLineup, events, stats, h2h } = data;
+  const { match, venue, homeFormation, awayFormation, homeLineup, awayLineup, events, stats } = data;
   const isLive = match.status === "live";
 
   const dateLong = new Date(match.startingAtISO).toLocaleString(undefined, {
@@ -94,11 +93,11 @@ export function MatchDetail() {
               style={{ background: "var(--primary)", fontFamily: "Lexend, sans-serif" }}
             >
               <span
-                className="w-2 h-2 rounded-full bg-white"
-                style={{ animation: "pulse 1.4s ease-in-out infinite" }}
+                className="w-2 h-2 rounded-full"
+                style={{ background: "var(--primary-foreground)", animation: "pulse 1.4s ease-in-out infinite" }}
               />
-              <Tv size={16} color="white" strokeWidth={2} />
-              <span style={{ color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-semibold)" }}>
+              <Tv size={16} color="var(--primary-foreground)" strokeWidth={2} />
+              <span style={{ color: "var(--primary-foreground)", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-semibold)" }}>
                 Watch Live
               </span>
             </a>
@@ -116,14 +115,27 @@ export function MatchDetail() {
         </div>
 
         {tab === "lineups" && (
-          <div className="grid grid-cols-2 gap-4">
-            <LineupColumn teamName={match.homeTeam.name} teamCode={match.homeTeam.code} formation={homeFormation} players={homeLineup} />
-            <LineupColumn teamName={match.awayTeam.name} teamCode={match.awayTeam.code} formation={awayFormation} players={awayLineup} align="right" />
-          </div>
+          <FormationPitch
+            homeLineup={homeLineup}
+            awayLineup={awayLineup}
+            homeFormation={homeFormation}
+            awayFormation={awayFormation}
+            homeCode={match.homeTeam.code}
+            awayCode={match.awayTeam.code}
+            homeName={match.homeTeam.name}
+            awayName={match.awayTeam.name}
+          />
         )}
         {tab === "events" && <EventsList events={events} home={match.homeTeam.code} away={match.awayTeam.code} />}
-        {tab === "stats"   && <StatsList stats={stats} />}
-        {tab === "h2h"     && <H2H items={h2h} />}
+        {tab === "stats"   && (
+          <StatsList
+            stats={stats}
+            homeCode={match.homeTeam.code}
+            awayCode={match.awayTeam.code}
+            homeName={match.homeTeam.name}
+            awayName={match.awayTeam.name}
+          />
+        )}
       </main>
     </>
   );
@@ -233,45 +245,214 @@ function SubTabItem({ label, active, onClick }: { label: string; active: boolean
   );
 }
 
-function LineupColumn({
-  teamName, teamCode, formation, players, align = "left",
+// Split 11 starters into formation lines: [GK, def, mid, ...] using the
+// formation string (e.g. "4-2-3-1"); falls back to grouping by position.
+function formationLines(players: LineupPlayer[], formation: string): LineupPlayer[][] {
+  const gk = players.filter((p) => p.position === "GK");
+  const outfield = players.filter((p) => p.position !== "GK");
+
+  let counts = formation.split(/[^0-9]+/).filter(Boolean).map(Number);
+  if (counts.length === 0 || counts.reduce((a, b) => a + b, 0) !== outfield.length) {
+    counts = (["DF", "MF", "FW"] as const)
+      .map((pos) => outfield.filter((p) => p.position === pos).length)
+      .filter((n) => n > 0);
+  }
+
+  const lines: LineupPlayer[][] = gk.length ? [gk] : [];
+  let i = 0;
+  for (const c of counts) {
+    lines.push(outfield.slice(i, i + c));
+    i += c;
+  }
+  if (i < outfield.length) lines.push(outfield.slice(i));
+  return lines;
+}
+
+// On tablet/desktop the pitch rotates 90° (landscape: home left, away right);
+// on mobile it stays portrait (home top, away bottom).
+function useIsWide(): boolean {
+  const [wide, setWide] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const handler = (e: MediaQueryListEvent) => setWide(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return wide;
+}
+
+function FormationPitch({
+  homeLineup, awayLineup, homeFormation, awayFormation, homeCode, awayCode, homeName, awayName,
 }: {
-  teamName: string; teamCode: string; formation: string;
-  players: { playerId: string; jersey: number; name: string; position: string }[];
-  align?: "left" | "right";
+  homeLineup: LineupPlayer[]; awayLineup: LineupPlayer[];
+  homeFormation: string; awayFormation: string;
+  homeCode: string; awayCode: string; homeName: string; awayName: string;
 }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl p-3 flex flex-col gap-2">
-      <div className={`flex items-center gap-2 ${align === "right" ? "flex-row-reverse text-right" : ""}`}>
-        <Flag code={teamCode} name={teamName} size={20} />
-        <div className={`flex flex-col ${align === "right" ? "items-end" : ""}`}>
-          <span className="text-foreground truncate" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-semibold)" }}>
-            {teamName}
-          </span>
-          <span className="text-muted-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "10px" }}>
-            {formation}
-          </span>
-        </div>
-      </div>
-      <ul className="flex flex-col">
-        {players.map((p) => (
-          <li key={p.playerId} className={`py-1.5 flex items-center gap-2 ${align === "right" ? "flex-row-reverse" : ""}`}>
-            <span
-              className="inline-flex items-center justify-center bg-muted text-foreground shrink-0"
-              style={{ width: 22, height: 22, borderRadius: 999, fontFamily: "Lexend, sans-serif", fontSize: "10px", fontWeight: "var(--font-weight-semibold)" }}
-            >
-              {p.jersey}
-            </span>
-            <span
-              className="text-foreground truncate"
-              style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-medium)" }}
-            >
-              {p.name}
-            </span>
-          </li>
-        ))}
-      </ul>
+  const horizontal = useIsWide();
+
+  if (homeLineup.length === 0 && awayLineup.length === 0) {
+    return (
+      <p className="text-muted-foreground px-1 py-8 text-center" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}>
+        Lineups not available yet.
+      </p>
+    );
+  }
+
+  const homeLines = formationLines(homeLineup, homeFormation);
+  const awayLines = formationLines(awayLineup, awayFormation);
+
+  const pitch = (
+    <div
+      className="relative w-full"
+      style={{
+        aspectRatio: horizontal ? "16 / 10" : "10 / 16",
+        background: "repeating-radial-gradient(circle at 50% 50%, #3f9a45 0 34px, #3a9040 34px 68px)",
+      }}
+    >
+      <PitchMarkings horizontal={horizontal} />
+      {placeLines(homeLines, "home", horizontal)}
+      {placeLines(awayLines, "away", horizontal)}
     </div>
+  );
+
+  if (horizontal) {
+    // Both formation labels share one bar above the field.
+    return (
+      <div className="rounded-2xl overflow-hidden border border-border">
+        <div className="flex items-center justify-between bg-card px-4 py-2.5">
+          <FormationTag code={homeCode} name={homeName} formation={homeFormation} />
+          <FormationTag code={awayCode} name={awayName} formation={awayFormation} align="right" />
+        </div>
+        {pitch}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-border">
+      <FormationBar code={homeCode} name={homeName} formation={homeFormation} />
+      {pitch}
+      <FormationBar code={awayCode} name={awayName} formation={awayFormation} />
+    </div>
+  );
+}
+
+// Place one team's lines as absolutely-positioned markers within its half.
+function placeLines(lines: LineupPlayer[][], side: "home" | "away", horizontal: boolean) {
+  const L = lines.length;
+  return lines.flatMap((row, li) => {
+    const t = L > 1 ? li / (L - 1) : 0; // 0 at GK edge → 1 toward halfway line
+    const band = side === "home" ? 6 + t * 41 : 94 - t * 41; // outer edge → centre
+    return row.map((p, i) => {
+      const spread = ((i + 1) / (row.length + 1)) * 100;
+      const x = horizontal ? band : spread;
+      const y = horizontal ? spread : band;
+      return <PlayerMarker key={p.playerId} player={p} x={x} y={y} side={side} />;
+    });
+  });
+}
+
+function PlayerMarker({ player, x, y, side }: { player: LineupPlayer; x: number; y: number; side: "home" | "away" }) {
+  const home = side === "home";
+  return (
+    <div className="absolute flex flex-col items-center" style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)", width: 64 }}>
+      <span
+        className="inline-flex items-center justify-center rounded-full"
+        style={{
+          width: 34, height: 34,
+          background: home ? "#ffffff" : "#15151a",
+          color: home ? "#15151a" : "#ffffff",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+          fontFamily: "Lexend, sans-serif", fontSize: "13px", fontWeight: "var(--font-weight-bold)",
+        }}
+      >
+        {player.jersey}
+      </span>
+      <span
+        className="mt-1 text-center truncate"
+        style={{
+          maxWidth: 64, color: "#ffffff",
+          fontFamily: "Lexend, sans-serif", fontSize: "10px", fontWeight: "var(--font-weight-medium)",
+          textShadow: "0 1px 2px rgba(0,0,0,0.85)",
+        }}
+      >
+        {player.name}
+      </span>
+    </div>
+  );
+}
+
+function FormationBar({ code, name, formation }: { code: string; name: string; formation: string }) {
+  return (
+    <div className="flex items-center justify-between bg-card px-4 py-2.5">
+      <div className="flex items-center gap-2">
+        <Flag code={code} name={name} size={22} />
+        <span className="text-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-semibold)" }}>
+          {code}
+        </span>
+      </div>
+      {formation && (
+        <span className="text-muted-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-medium)", letterSpacing: "0.04em" }}>
+          {formation}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function FormationTag({ code, name, formation, align = "left" }: { code: string; name: string; formation: string; align?: "left" | "right" }) {
+  return (
+    <div className={`flex items-center gap-2 ${align === "right" ? "flex-row-reverse" : ""}`}>
+      <Flag code={code} name={name} size={22} />
+      <span className="text-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-semibold)" }}>
+        {code}
+      </span>
+      {formation && (
+        <span className="text-muted-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-medium)", letterSpacing: "0.04em" }}>
+          {formation}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PitchMarkings({ horizontal }: { horizontal: boolean }) {
+  const line = "rgba(255,255,255,0.55)";
+  if (horizontal) {
+    return (
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 160 100" preserveAspectRatio="none" aria-hidden>
+        <g fill="none" stroke={line} strokeWidth="0.5">
+          <rect x="2" y="2" width="156" height="96" />
+          <line x1="80" y1="2" x2="80" y2="98" />
+          <circle cx="80" cy="50" r="13" />
+          <circle cx="80" cy="50" r="0.8" fill={line} stroke="none" />
+          {/* left box (home) */}
+          <rect x="2" y="24" width="22" height="52" />
+          <rect x="2" y="38" width="9" height="24" />
+          {/* right box (away) */}
+          <rect x="136" y="24" width="22" height="52" />
+          <rect x="149" y="38" width="9" height="24" />
+        </g>
+      </svg>
+    );
+  }
+  return (
+    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 160" preserveAspectRatio="none" aria-hidden>
+      <g fill="none" stroke={line} strokeWidth="0.5">
+        <rect x="2" y="2" width="96" height="156" />
+        <line x1="2" y1="80" x2="98" y2="80" />
+        <circle cx="50" cy="80" r="13" />
+        <circle cx="50" cy="80" r="0.8" fill={line} stroke="none" />
+        {/* top box */}
+        <rect x="24" y="2" width="52" height="22" />
+        <rect x="38" y="2" width="24" height="9" />
+        {/* bottom box */}
+        <rect x="24" y="136" width="52" height="22" />
+        <rect x="38" y="149" width="24" height="9" />
+      </g>
+    </svg>
   );
 }
 
@@ -323,55 +504,91 @@ function EventIcon({ type }: { type: MatchEvent["type"] }) {
   }
 }
 
-function StatsList({ stats }: { stats: MatchStatLine[] }) {
+function StatsList({
+  stats, homeCode, awayCode, homeName, awayName,
+}: {
+  stats: MatchStatLine[];
+  homeCode: string; awayCode: string; homeName: string; awayName: string;
+}) {
+  if (stats.length === 0) {
+    return (
+      <p className="text-muted-foreground px-1 py-8 text-center" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}>
+        No stats available.
+      </p>
+    );
+  }
+
   return (
-    <div className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-3">
-      {stats.map((s) => {
-        const total = s.home + s.away;
-        const homePct = total === 0 ? 50 : (s.home / total) * 100;
-        return (
-          <div key={s.label} className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-medium)" }}>
-              <span className="text-foreground">{s.home}{s.unit ?? ""}</span>
-              <span className="text-muted-foreground">{s.label}</span>
-              <span className="text-foreground">{s.away}{s.unit ?? ""}</span>
-            </div>
-            <div className="h-1 bg-muted rounded-full overflow-hidden flex">
-              <div style={{ width: `${homePct}%`, background: "var(--primary)" }} />
-              <div className="bg-foreground/40 flex-1" />
-            </div>
-          </div>
-        );
-      })}
+    <div className="bg-card border border-border rounded-2xl px-4 py-5 flex flex-col gap-5">
+      {/* Section header with flags */}
+      <div className="flex items-center justify-between">
+        <FlagTag code={homeCode} name={homeName} />
+        <h3
+          className="text-foreground"
+          style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-bold)", letterSpacing: "0.08em" }}
+        >
+          SUMMARY
+        </h3>
+        <FlagTag code={awayCode} name={awayName} />
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {stats.map((s) => (
+          <StatBarRow key={s.label} stat={s} />
+        ))}
+      </div>
     </div>
   );
 }
 
-function H2H({ items }: { items: { date: string; home: { name: string; code: string }; away: { name: string; code: string }; homeScore: number; awayScore: number }[] }) {
+function FlagTag({ code, name }: { code: string; name: string }) {
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
-      {items.map((h, i) => (
-        <div key={i} className={`px-4 py-3 flex items-center gap-3 ${i > 0 ? "border-t border-border" : ""}`}>
-          <span className="text-muted-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-xs)", minWidth: 76 }}>
-            {h.date}
-          </span>
-          <div className="flex-1 flex items-center gap-2 min-w-0">
-            <Flag code={h.home.code} name={h.home.name} size={18} />
-            <span className="text-foreground truncate" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-medium)" }}>
-              {h.home.name}
-            </span>
-          </div>
-          <span className="text-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-semibold)" }}>
-            {h.homeScore} – {h.awayScore}
-          </span>
-          <div className="flex-1 flex items-center gap-2 min-w-0 flex-row-reverse text-right">
-            <Flag code={h.away.code} name={h.away.name} size={18} />
-            <span className="text-foreground truncate" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-medium)" }}>
-              {h.away.name}
-            </span>
-          </div>
-        </div>
-      ))}
+    <div className="flex flex-col items-center gap-1">
+      <Flag code={code} name={name} size={36} />
+      <span className="text-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "11px", fontWeight: "var(--font-weight-semibold)", letterSpacing: "0.04em" }}>
+        {code}
+      </span>
     </div>
   );
 }
+
+function StatBarRow({ stat }: { stat: MatchStatLine }) {
+  const { label, home, away, unit = "" } = stat;
+  const max = Math.max(home, away);
+  const homeFrac = max > 0 ? home / max : 0;
+  const awayFrac = max > 0 ? away / max : 0;
+
+  const valStyle: React.CSSProperties = {
+    fontFamily: "Lexend, sans-serif",
+    fontSize: "var(--text-base)",
+    fontWeight: "var(--font-weight-bold)",
+    color: "var(--foreground)",
+    fontVariantNumeric: "tabular-nums",
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <span style={{ ...valStyle, minWidth: 44, textAlign: "left" }}>{home}{unit}</span>
+        <span
+          className="text-muted-foreground text-center"
+          style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-medium)" }}
+        >
+          {label}
+        </span>
+        <span style={{ ...valStyle, minWidth: 44, textAlign: "right" }}>{away}{unit}</span>
+      </div>
+
+      {/* Center-anchored bars: each side fills outward from the middle */}
+      <div className="flex items-center gap-1">
+        <div className="flex-1 h-1.5 rounded-full relative overflow-hidden" style={{ background: "var(--muted)" }}>
+          <div className="absolute right-0 top-0 h-full rounded-full" style={{ width: `${homeFrac * 100}%`, background: "var(--foreground)" }} />
+        </div>
+        <div className="flex-1 h-1.5 rounded-full relative overflow-hidden" style={{ background: "var(--muted)" }}>
+          <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${awayFrac * 100}%`, background: "var(--foreground)" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+

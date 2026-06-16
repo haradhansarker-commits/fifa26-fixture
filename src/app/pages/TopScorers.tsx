@@ -2,14 +2,11 @@ import { useState } from "react";
 import { Goal, Handshake, Square, Target } from "lucide-react";
 import { Flag } from "../components/Flag";
 import { PageHeader } from "../components/PageHeader";
-import {
-  getLeaderboard,
-  type LeaderboardCategory,
-  type LeaderboardEntry,
-} from "../services/liveData";
+import { useLeaderboards } from "../services/useLiveData";
+import type { LbCategory, LbEntry } from "../services/fifaData";
 
 type CategoryDef = {
-  id: LeaderboardCategory;
+  id: LbCategory;
   label: string;
   short: string;
   metricLabel: string;
@@ -35,10 +32,10 @@ const CATEGORIES: CategoryDef[] = [
     accent: "var(--chart-2)",
   },
   {
-    id: "shotsOnTarget",
-    label: "Shots on Target",
-    short: "SoT",
-    metricLabel: "SoT",
+    id: "shots",
+    label: "Shots",
+    short: "Shots",
+    metricLabel: "Sh",
     icon: <Target size={14} strokeWidth={2} />,
     accent: "var(--chart-4)",
   },
@@ -61,15 +58,22 @@ const CATEGORIES: CategoryDef[] = [
 ];
 
 export function TopScorers({ inline }: { inline?: boolean }) {
-  const [activeId, setActiveId] = useState<LeaderboardCategory>("goals");
+  const [activeId, setActiveId] = useState<LbCategory>("goals");
   const active = CATEGORIES.find((c) => c.id === activeId)!;
-  const entries = getLeaderboard(activeId);
+  const { data, loading, error } = useLeaderboards();
+  const entries = data[activeId];
 
   const body = (
     <div className="flex flex-col gap-4">
       <CategoryPills active={activeId} onChange={setActiveId} />
       <SectionHeader category={active} count={entries.length} />
-      <LeaderboardCard entries={entries} category={active} />
+      {loading && entries.length === 0 ? (
+        <StatusCard text="Loading leaderboard…" />
+      ) : error && entries.length === 0 ? (
+        <StatusCard text="Could not load leaderboard from FIFA. Retrying…" />
+      ) : (
+        <LeaderboardCard entries={entries} category={active} />
+      )}
     </div>
   );
 
@@ -85,12 +89,23 @@ export function TopScorers({ inline }: { inline?: boolean }) {
   );
 }
 
+function StatusCard({ text }: { text: string }) {
+  return (
+    <div
+      className="bg-card border border-border rounded-2xl px-4 py-10 text-center text-muted-foreground"
+      style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}
+    >
+      {text}
+    </div>
+  );
+}
+
 function CategoryPills({
   active,
   onChange,
 }: {
-  active: LeaderboardCategory;
-  onChange: (id: LeaderboardCategory) => void;
+  active: LbCategory;
+  onChange: (id: LbCategory) => void;
 }) {
   return (
     <div
@@ -162,7 +177,7 @@ function LeaderboardCard({
   entries,
   category,
 }: {
-  entries: LeaderboardEntry[];
+  entries: LbEntry[];
   category: CategoryDef;
 }) {
   if (entries.length === 0) {
@@ -181,7 +196,7 @@ function LeaderboardCard({
       <div
         className="px-3 py-3 grid items-center text-muted-foreground"
         style={{
-          gridTemplateColumns: "24px 1fr 44px 44px",
+          gridTemplateColumns: "24px 1fr 44px",
           gap: "6px",
           fontFamily: "Lexend, sans-serif",
           fontSize: "11px",
@@ -192,8 +207,7 @@ function LeaderboardCard({
       >
         <span>#</span>
         <span>Player</span>
-        <span className="text-center">{category.metricLabel}</span>
-        <span className="text-right">Min</span>
+        <span className="text-right">{category.metricLabel}</span>
       </div>
 
       {entries.map((e) => (
@@ -201,7 +215,7 @@ function LeaderboardCard({
           key={e.playerId}
           className="px-3 py-3 grid items-center border-t border-border"
           style={{
-            gridTemplateColumns: "24px 1fr 44px 44px",
+            gridTemplateColumns: "24px 1fr 44px",
             gap: "6px",
             fontFamily: "Lexend, sans-serif",
           }}
@@ -232,7 +246,7 @@ function LeaderboardCard({
           </div>
 
           <span
-            className="text-center tabular-nums"
+            className="text-right tabular-nums"
             style={{
               fontSize: "var(--text-base)",
               fontWeight: "var(--font-weight-bold)",
@@ -240,13 +254,6 @@ function LeaderboardCard({
             }}
           >
             {e.value}
-          </span>
-
-          <span
-            className="text-muted-foreground text-right tabular-nums"
-            style={{ fontSize: "13px" }}
-          >
-            {e.minutes}'
           </span>
         </div>
       ))}

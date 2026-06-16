@@ -1,8 +1,8 @@
-import { useNavigate, useSearchParams } from "react-router";
-import { ChevronLeft } from "lucide-react";
+import { useSearchParams } from "react-router";
 import { FixtureList } from "./FixtureList";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { KnockoutBracket } from "./KnockoutBracket";
+import { TournamentSummary } from "./TournamentSummary";
 import { TopScorers } from "../pages/TopScorers";
 
 type Tab = "fixtures" | "standings" | "knockout" | "scorers";
@@ -18,7 +18,6 @@ const VALID_TABS = new Set<Tab>(["fixtures", "standings", "knockout", "scorers"]
 
 export function FixtureLeaderboard() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   const rawTab = searchParams.get("tab") as Tab | null;
   const activeTab: Tab = rawTab && VALID_TABS.has(rawTab) ? rawTab : "fixtures";
@@ -29,18 +28,8 @@ export function FixtureLeaderboard() {
 
   return (
     <div className="flex flex-col min-h-full w-full bg-background text-foreground">
-      <header className="sticky top-0 z-40 bg-background">
-        <div className="px-6 py-2 flex items-center justify-between">
-          <button
-            aria-label="Back"
-            onClick={() => navigate(-1)}
-            className="text-foreground hover:opacity-80 transition-opacity"
-          >
-            <ChevronLeft size={24} strokeWidth={1.5} />
-          </button>
-        </div>
-
-        <div className="px-4 pt-2 pb-4">
+      <header className="bg-background">
+        <div className="px-4 pt-7 pb-4">
           <h1
             className="text-foreground"
             style={{
@@ -53,9 +42,15 @@ export function FixtureLeaderboard() {
             FIFA World Cup 2026™
           </h1>
         </div>
+      </header>
 
+      <div className="px-4 pb-4">
+        <TournamentSummary />
+      </div>
+
+      <div className="sticky top-0 z-40 bg-background">
         <div
-          className="flex items-center overflow-x-auto -mx-4 px-4 border-b border-border"
+          className="flex items-center overflow-x-auto px-4 border-b border-border"
           style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
         >
           {TABS.map((tab) => (
@@ -67,7 +62,7 @@ export function FixtureLeaderboard() {
             />
           ))}
         </div>
-      </header>
+      </div>
 
       <main className="flex-1 px-4 py-5">
         {activeTab === "fixtures" && <FixtureList />}

@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import type { Match, GroupData, KnockoutRound, MatchDetailData } from "./liveData";
-import { fetchFixtures, fetchStandings, fetchKnockout, fetchMatchDetail, loadMatches } from "./fifaData";
+import {
+  fetchFixtures, fetchStandings, fetchKnockout, fetchMatchDetail, fetchLeaderboards, loadMatches,
+  type LbCategory, type LbEntry,
+} from "./fifaData";
+
+const EMPTY_LEADERBOARDS: Record<LbCategory, LbEntry[]> = { goals: [], assists: [], shots: [], yellow: [], red: [] };
 
 // Live data from the public FIFA API. See fifaData.ts for endpoints/mapping.
 // Fixtures/knockout poll periodically so in-progress matches refresh.
@@ -46,6 +51,10 @@ export function useKnockout(): AsyncState<KnockoutRound[]> {
 
 export function useMatchDetail(matchId: string): AsyncState<MatchDetailData | undefined> {
   return useAsync(() => fetchMatchDetail(matchId), undefined, [matchId], 30_000);
+}
+
+export function useLeaderboards(): AsyncState<Record<LbCategory, LbEntry[]>> {
+  return useAsync(fetchLeaderboards, EMPTY_LEADERBOARDS, []);
 }
 
 // ---- Back-compat thin wrappers (older call sites) ----
