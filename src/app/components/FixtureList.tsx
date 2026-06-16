@@ -1,11 +1,12 @@
-import { Fragment, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Fragment, useEffect, useRef } from "react";
+import { Link, useSearchParams } from "react-router";
 import { Flag } from "./Flag";
 import { type Match } from "../services/liveData";
 import { useFixtures } from "../services/useLiveData";
 
 export function FixtureList() {
   const { data: allMatches, loading, error } = useFixtures();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const grouped = allMatches.reduce<Record<string, { dayLabel: string; items: Match[] }>>((acc, m) => {
     if (!acc[m.date]) acc[m.date] = { dayLabel: m.dayLabel, items: [] };
@@ -14,7 +15,25 @@ export function FixtureList() {
   }, {});
 
   const days = Object.keys(grouped).sort();
-  const [selectedDay, setSelectedDay] = useState<string>("all");
+
+  // Default to today's fixtures (or the next match day) on first entry; the
+  // chosen day is mirrored in the ?day= param so it survives back-navigation.
+  const todayKey = new Date().toLocaleDateString("en-CA");
+  const defaultDay = days.includes(todayKey) ? todayKey : days.find((d) => d >= todayKey) ?? "all";
+  const dayParam = searchParams.get("day");
+  const selectedDay = dayParam && (dayParam === "all" || days.includes(dayParam)) ? dayParam : defaultDay;
+
+  const selectDay = (key: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("day", key);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const visibleDays = selectedDay === "all" ? days : days.filter((d) => d === selectedDay);
 
   if (loading && allMatches.length === 0) return <StatusNote text="Loading fixtures…" />;
@@ -22,7 +41,7 @@ export function FixtureList() {
 
   return (
     <div className="flex flex-col gap-5">
-      <DateScrubber days={days} grouped={grouped} selected={selectedDay} onSelect={setSelectedDay} />
+      <DateScrubber days={days} grouped={grouped} selected={selectedDay} onSelect={selectDay} />
 
       {visibleDays.length === 0 && (
         <p
@@ -90,6 +109,12 @@ function DateScrubber({
   onSelect: (day: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+
+  // Bring the selected day chip into view (e.g. today on first entry).
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [selected]);
 
   const chips: { key: string; weekday: string; day: string; count: number | null }[] = [
     { key: "all", weekday: "All", day: "", count: null },
@@ -117,6 +142,7 @@ function DateScrubber({
         return (
           <button
             key={chip.key}
+            ref={active ? activeRef : undefined}
             onClick={() => onSelect(chip.key)}
             className={`shrink-0 flex flex-col items-center justify-center rounded-2xl border transition-colors min-w-[56px] px-3 py-2 ${
               active

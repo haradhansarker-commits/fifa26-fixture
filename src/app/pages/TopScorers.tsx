@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router";
 import { Goal, Handshake, Square, Target } from "lucide-react";
 import { Flag } from "../components/Flag";
 import { PageHeader } from "../components/PageHeader";
@@ -198,10 +197,9 @@ function LeaderboardCard({
       </div>
 
       {entries.map((e) => (
-        <Link
+        <div
           key={e.playerId}
-          to={`/player/${e.playerId}`}
-          className="px-3 py-3 grid items-center border-t border-border active:bg-muted/60 hover:bg-muted/40 transition-colors"
+          className="px-3 py-3 grid items-center border-t border-border"
           style={{
             gridTemplateColumns: "24px 1fr 44px 44px",
             gap: "6px",
@@ -250,7 +248,7 @@ function LeaderboardCard({
           >
             {e.minutes}'
           </span>
-        </Link>
+        </div>
       ))}
     </div>
   );

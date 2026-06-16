@@ -262,13 +262,12 @@ function LineupColumn({
             >
               {p.jersey}
             </span>
-            <Link
-              to={`/player/${p.playerId}`}
-              className="text-foreground truncate hover:opacity-80 transition-opacity"
+            <span
+              className="text-foreground truncate"
               style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-medium)" }}
             >
               {p.name}
-            </Link>
+            </span>
           </li>
         ))}
       </ul>

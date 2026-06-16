@@ -75,10 +75,9 @@ export function TeamProfile() {
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             {(["GK", "DF", "MF", "FW"] as const).flatMap((pos, gi) =>
               byPosition[pos].map((p, i) => (
-                <Link
+                <div
                   key={p.id}
-                  to={`/player/${p.id}`}
-                  className={`px-4 py-3 flex items-center gap-3 hover:bg-muted/40 transition-colors ${
+                  className={`px-4 py-3 flex items-center gap-3 ${
                     gi === 0 && i === 0 ? "" : "border-t border-border"
                   }`}
                 >
@@ -122,7 +121,7 @@ export function TeamProfile() {
                   >
                     {p.stats.goals}G · {p.stats.assists}A
                   </span>
-                </Link>
+                </div>
               )),
             )}
             {squad.length === 0 && (
