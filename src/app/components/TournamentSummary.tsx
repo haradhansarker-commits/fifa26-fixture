@@ -3,11 +3,13 @@ import { Flame, Trophy, Goal, CalendarDays } from "lucide-react";
 import { Flag } from "./Flag";
 import { useFixtures } from "../services/useLiveData";
 import type { Match } from "../services/liveData";
+import { SummarySkeleton } from "./Skeleton";
 
 // Compact tournament pulse: the live match (or the next one) plus a few
 // headline numbers for FIFA World Cup 2026.
 export function TournamentSummary() {
-  const { data: matches } = useFixtures();
+  const { data: matches, loading } = useFixtures();
+  if (loading && matches.length === 0) return <SummarySkeleton />;
   if (matches.length === 0) return null;
 
   const live = matches.find((m) => m.status === "live");

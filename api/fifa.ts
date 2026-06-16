@@ -11,6 +11,11 @@ const ALLOWED_PREFIX = "https://api.fifa.com/api/v3/";
 
 const TEN_MINUTES = 600;
 const THIRTY_SECONDS = 30;
+const UPSTREAM_TIMEOUT_MS = 8000;
+
+// Cap how long the function itself may run, so a stuck FIFA origin returns fast
+// instead of hanging up to Vercel's default (300 s) and blocking the browser.
+export const config = { maxDuration: 12 };
 
 export default async function handler(req: any, res: any) {
   const u = req.query?.u;
@@ -21,9 +26,13 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+
   try {
     const upstream = await fetch(target, {
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+      signal: controller.signal,
     });
     const body = await upstream.text();
 
@@ -37,7 +46,12 @@ export default async function handler(req: any, res: any) {
       `public, s-maxage=${ttl}, stale-while-revalidate=${ttl * 2}`,
     );
     res.status(upstream.status).send(body);
-  } catch {
-    res.status(502).json({ error: "Upstream FIFA API request failed" });
+  } catch (e: any) {
+    const timedOut = e?.name === "AbortError";
+    res.status(timedOut ? 504 : 502).json({
+      error: timedOut ? "Upstream FIFA API timed out" : "Upstream FIFA API request failed",
+    });
+  } finally {
+    clearTimeout(timer);
   }
 }

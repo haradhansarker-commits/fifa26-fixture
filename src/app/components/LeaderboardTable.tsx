@@ -4,11 +4,12 @@ import { Flag } from "./Flag";
 import { FormBadges } from "./FormBadges";
 import { type GroupData } from "../services/liveData";
 import { useStandings } from "../services/useLiveData";
+import { StandingsSkeleton } from "./Skeleton";
 
 export function LeaderboardTable() {
   const { data: groups, loading, error } = useStandings();
 
-  if (loading && groups.length === 0) return <Note text="Loading standings…" />;
+  if (loading && groups.length === 0) return <StandingsSkeleton />;
   if (error && groups.length === 0) return <Note text="Could not load standings from FIFA. Retrying…" />;
 
   return (

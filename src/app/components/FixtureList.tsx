@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router";
+import { motion, AnimatePresence } from "motion/react";
 import { Flag } from "./Flag";
 import { type Match } from "../services/liveData";
 import { useFixtures } from "../services/useLiveData";
+import { FixtureListSkeleton } from "./Skeleton";
 
 export function FixtureList() {
   const { data: allMatches, loading, error } = useFixtures();
@@ -36,51 +38,60 @@ export function FixtureList() {
 
   const visibleDays = selectedDay === "all" ? days : days.filter((d) => d === selectedDay);
 
-  if (loading && allMatches.length === 0) return <StatusNote text="Loading fixtures…" />;
+  if (loading && allMatches.length === 0) return <FixtureListSkeleton />;
   if (error && allMatches.length === 0) return <StatusNote text="Could not load fixtures from FIFA. Retrying…" />;
 
   return (
     <div className="flex flex-col gap-5">
       <DateScrubber days={days} grouped={grouped} selected={selectedDay} onSelect={selectDay} />
 
-      {visibleDays.length === 0 && (
-        <p
-          className="text-muted-foreground px-1"
-          style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={selectedDay}
+          className="flex flex-col gap-5"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
         >
-          No fixtures for this selection.
-        </p>
-      )}
-
-      {visibleDays.map((day) => (
-        <Fragment key={day}>
-          <section className="flex flex-col gap-2">
-            <h2
+          {visibleDays.length === 0 && (
+            <p
               className="text-muted-foreground px-1"
-              style={{
-                fontFamily: "Lexend, sans-serif",
-                fontSize: "var(--text-xs)",
-                fontWeight: "var(--font-weight-semibold)",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
+              style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}
             >
-              {grouped[day].dayLabel}
-            </h2>
+              No fixtures for this selection.
+            </p>
+          )}
 
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              {grouped[day].items.map((match, i) => (
-                <Fragment key={match.id}>
-                  {i > 0 && <div className="h-px bg-border mx-4" />}
-                  <Link to={`/match/${match.id}`} className="block hover:bg-muted/40 transition-colors">
-                    <MatchRow match={match} />
-                  </Link>
-                </Fragment>
-              ))}
-            </div>
-          </section>
-        </Fragment>
-      ))}
+          {visibleDays.map((day) => (
+            <section key={day} className="flex flex-col gap-2">
+              <h2
+                className="text-muted-foreground px-1"
+                style={{
+                  fontFamily: "Lexend, sans-serif",
+                  fontSize: "var(--text-xs)",
+                  fontWeight: "var(--font-weight-semibold)",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {grouped[day].dayLabel}
+              </h2>
+
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                {grouped[day].items.map((match, i) => (
+                  <Fragment key={match.id}>
+                    {i > 0 && <div className="h-px bg-border mx-4" />}
+                    <Link to={`/match/${match.id}`} className="block hover:bg-muted/40 transition-colors">
+                      <MatchRow match={match} />
+                    </Link>
+                  </Fragment>
+                ))}
+              </div>
+            </section>
+          ))}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -111,10 +122,68 @@ function DateScrubber({
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
 
-  // Bring the selected day chip into view (e.g. today on first entry).
+  // Instagram-dot move motion: chips scale + fade by their distance from the
+  // strip's centre, so the focused day grows while neighbours recede.
+  const applyScale = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const center = el.scrollLeft + el.clientWidth / 2;
+    for (const child of Array.from(el.children) as HTMLElement[]) {
+      const c = child.offsetLeft + child.offsetWidth / 2;
+      const max = el.clientWidth / 2 + child.offsetWidth;
+      const t = Math.min(1, Math.abs(c - center) / max);
+      child.style.transform = `scale(${1 - t * 0.34})`;
+      child.style.opacity = String(1 - t * 0.55);
+    }
+  };
+
+  // Recompute on scroll (rAF-throttled).
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
-  }, [selected]);
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(applyScale);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    applyScale();
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // Slowly glide the selected chip to the centre with a custom tween (the native
+  // "smooth" behaviour is too fast); scaling follows along each frame.
+  useEffect(() => {
+    const el = scrollRef.current;
+    const a = activeRef.current;
+    if (!el || !a) return;
+
+    const from = el.scrollLeft;
+    const to = a.offsetLeft + a.offsetWidth / 2 - el.clientWidth / 2;
+    const dist = to - from;
+    if (Math.abs(dist) < 1) {
+      applyScale();
+      return;
+    }
+
+    const DURATION = 650; // ms
+    const start = performance.now();
+    let raf = 0;
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / DURATION);
+      el.scrollLeft = from + dist * easeOutCubic(p);
+      applyScale();
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, days.length]);
 
   const chips: { key: string; weekday: string; day: string; count: number | null }[] = [
     { key: "all", weekday: "All", day: "", count: null },
@@ -144,13 +213,21 @@ function DateScrubber({
             key={chip.key}
             ref={active ? activeRef : undefined}
             onClick={() => onSelect(chip.key)}
-            className={`shrink-0 flex flex-col items-center justify-center rounded-2xl border transition-colors min-w-[56px] px-3 py-2 ${
-              active
-                ? "bg-primary border-primary text-primary-foreground"
-                : "bg-card border-border text-foreground hover:bg-muted"
+            className={`relative shrink-0 flex flex-col items-center justify-center rounded-2xl border min-w-[56px] px-3 py-2 ${
+              active ? "border-primary" : "border-border bg-card hover:bg-muted"
             }`}
+            style={{ color: active ? "var(--primary-foreground)" : "var(--foreground)" }}
           >
+            {active && (
+              <motion.span
+                layoutId="dayPill"
+                className="absolute inset-0 rounded-2xl"
+                style={{ background: "var(--primary)" }}
+                transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.9 }}
+              />
+            )}
             <span
+              className="relative"
               style={{
                 fontFamily: "Lexend, sans-serif",
                 fontSize: "var(--text-xs)",
@@ -162,6 +239,7 @@ function DateScrubber({
             </span>
             {!isAll && (
               <span
+                className="relative"
                 style={{
                   fontFamily: "Lexend, sans-serif",
                   fontSize: "var(--text-lg)",
@@ -174,6 +252,7 @@ function DateScrubber({
             )}
             {chip.count !== null && (
               <span
+                className="relative"
                 style={{
                   fontFamily: "Lexend, sans-serif",
                   fontSize: "10px",

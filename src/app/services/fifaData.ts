@@ -90,10 +90,20 @@ type RawMatch = {
 
 // ---------- fetch + cache ----------
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`FIFA API ${res.status}: ${url}`);
-  return res.json() as Promise<T>;
+// fetch() has no default timeout, so a slow/stuck request would hang forever and
+// block Promise.all (endless loading). Abort after `timeoutMs` instead.
+const FETCH_TIMEOUT_MS = 8000;
+
+async function getJson<T>(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`FIFA API ${res.status}: ${url}`);
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 let matchesPromise: Promise<RawMatch[]> | null = null;
@@ -109,6 +119,34 @@ export function loadMatches(force = false): Promise<RawMatch[]> {
       });
   }
   return matchesPromise;
+}
+
+// Timelines for every finished match, fetched once and shared by both the
+// leaderboards and the standings fair-play tiebreaker (previously each fetched
+// the same timelines separately — ~2× the requests).
+export type FinishedTimeline = { match: RawMatch; events: RawEvent[] | null };
+
+let finishedTimelinesPromise: Promise<FinishedTimeline[]> | null = null;
+
+function loadFinishedTimelines(): Promise<FinishedTimeline[]> {
+  if (!finishedTimelinesPromise) {
+    finishedTimelinesPromise = (async () => {
+      const all = await loadMatches();
+      const finished = all.filter((m) => mapStatus(m) === "finished");
+      const events = await Promise.all(
+        finished.map((m) =>
+          getJson<{ Event: RawEvent[] }>(api(`/timelines/${COMPETITION}/${SEASON}/${m.IdStage}/${m.IdMatch}?language=en`))
+            .then((d) => d.Event ?? null)
+            .catch(() => null),
+        ),
+      );
+      return finished.map((m, i) => ({ match: m, events: events[i] }));
+    })().catch((e) => {
+      finishedTimelinesPromise = null;
+      throw e;
+    });
+  }
+  return finishedTimelinesPromise;
 }
 
 // ---------- status / time helpers ----------
@@ -214,22 +252,16 @@ function fetchDisciplinary(): Promise<Map<string, number>> {
 }
 
 async function buildDisciplinary(): Promise<Map<string, number>> {
-  const all = await loadMatches();
-  const finished = all.filter((m) => isGroupStage(m) && mapStatus(m) === "finished");
-  const timelines = await Promise.all(
-    finished.map((m) =>
-      getJson<{ Event: RawEvent[] }>(api(`/timelines/${COMPETITION}/${SEASON}/${m.IdStage}/${m.IdMatch}?language=en`)).catch(() => null),
-    ),
-  );
+  const timelines = (await loadFinishedTimelines()).filter((t) => isGroupStage(t.match));
 
   const teamPoints = new Map<string, number>();
 
-  timelines.forEach((tl, idx) => {
-    if (!tl?.Event) return;
-    const matchId = finished[idx].IdMatch;
+  timelines.forEach(({ match, events }) => {
+    if (!events) return;
+    const matchId = match.IdMatch;
     // group card counts per player within this match
     const perPlayer = new Map<string, { teamId: string; y: number; r: number }>();
-    for (const e of tl.Event) {
+    for (const e of events) {
       if (e.Type !== 2 && e.Type !== 3) continue; // yellow / red only
       const id = e.IdPlayer;
       if (!id) continue;
@@ -671,19 +703,14 @@ async function buildLeaderboards(): Promise<Record<LbCategory, LbEntry[]>> {
     }
   }
 
-  const finished = all.filter((m) => mapStatus(m) === "finished");
-  const timelines = await Promise.all(
-    finished.map((m) =>
-      getJson<{ Event: RawEvent[] }>(api(`/timelines/${COMPETITION}/${SEASON}/${m.IdStage}/${m.IdMatch}?language=en`)).catch(() => null),
-    ),
-  );
+  const timelines = await loadFinishedTimelines();
 
   type Agg = { name: string; teamId: string; goals: number; assists: number; shots: number; yellow: number; red: number };
   const players = new Map<string, Agg>();
 
-  for (const tl of timelines) {
-    if (!tl?.Event) continue;
-    for (const e of tl.Event) {
+  for (const { events } of timelines) {
+    if (!events) continue;
+    for (const e of events) {
       const cat = EVENT_CATEGORY[e.Type];
       if (!cat) continue;
       const id = e.IdPlayer;
@@ -717,4 +744,40 @@ async function buildLeaderboards(): Promise<Record<LbCategory, LbEntry[]>> {
       });
   }
   return out;
+}
+
+// ---------- team profile (real data: standing + fixtures) ----------
+
+export type TeamProfileData = {
+  team: Team;
+  group?: string;
+  standing?: TeamStats;
+  matches: Match[];
+};
+
+export async function fetchTeamProfile(code: string): Promise<TeamProfileData | undefined> {
+  const wanted = code.toUpperCase();
+  const [fixtures, groups] = await Promise.all([fetchFixtures(), fetchStandings()]);
+
+  const matches = fixtures.filter(
+    (m) => m.homeTeam.code.toUpperCase() === wanted || m.awayTeam.code.toUpperCase() === wanted,
+  );
+  if (matches.length === 0) return undefined;
+
+  const sample = matches[0];
+  const team =
+    sample.homeTeam.code.toUpperCase() === wanted ? sample.homeTeam : sample.awayTeam;
+
+  let group: string | undefined;
+  let standing: TeamStats | undefined;
+  for (const g of groups) {
+    const row = g.teams.find((t) => t.code.toUpperCase() === wanted);
+    if (row) {
+      group = g.name;
+      standing = row;
+      break;
+    }
+  }
+
+  return { team, group, standing, matches };
 }

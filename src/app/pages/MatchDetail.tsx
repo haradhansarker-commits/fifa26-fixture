@@ -3,8 +3,10 @@ import { useState, useEffect } from "react";
 import { Goal, Flag as FlagIcon, RefreshCw, Square, MapPin, Tv } from "lucide-react";
 import { Flag } from "../components/Flag";
 import { PageHeader } from "../components/PageHeader";
+import { motion } from "motion/react";
 import { useMatchDetail, useWatchLink } from "../services/useLiveData";
 import type { MatchEvent, MatchStatLine, LineupPlayer } from "../services/liveData";
+import { MatchDetailSkeleton } from "../components/Skeleton";
 
 type SubTab = "lineups" | "events" | "stats";
 
@@ -24,10 +26,8 @@ export function MatchDetail() {
     return (
       <>
         <PageHeader title="Match" />
-        <main className="px-4 py-8">
-          <p className="text-muted-foreground text-center" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}>
-            Loading match…
-          </p>
+        <main className="pb-8">
+          <MatchDetailSkeleton />
         </main>
       </>
     );
@@ -114,28 +114,35 @@ export function MatchDetail() {
           ))}
         </div>
 
-        {tab === "lineups" && (
-          <FormationPitch
-            homeLineup={homeLineup}
-            awayLineup={awayLineup}
-            homeFormation={homeFormation}
-            awayFormation={awayFormation}
-            homeCode={match.homeTeam.code}
-            awayCode={match.awayTeam.code}
-            homeName={match.homeTeam.name}
-            awayName={match.awayTeam.name}
-          />
-        )}
-        {tab === "events" && <EventsList events={events} home={match.homeTeam.code} away={match.awayTeam.code} />}
-        {tab === "stats"   && (
-          <StatsList
-            stats={stats}
-            homeCode={match.homeTeam.code}
-            awayCode={match.awayTeam.code}
-            homeName={match.homeTeam.name}
-            awayName={match.awayTeam.name}
-          />
-        )}
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          {tab === "lineups" && (
+            <FormationPitch
+              homeLineup={homeLineup}
+              awayLineup={awayLineup}
+              homeFormation={homeFormation}
+              awayFormation={awayFormation}
+              homeCode={match.homeTeam.code}
+              awayCode={match.awayTeam.code}
+              homeName={match.homeTeam.name}
+              awayName={match.awayTeam.name}
+            />
+          )}
+          {tab === "events" && <EventsList events={events} home={match.homeTeam.code} away={match.awayTeam.code} />}
+          {tab === "stats" && (
+            <StatsList
+              stats={stats}
+              homeCode={match.homeTeam.code}
+              awayCode={match.awayTeam.code}
+              homeName={match.homeTeam.name}
+              awayName={match.awayTeam.name}
+            />
+          )}
+        </motion.div>
       </main>
     </>
   );
@@ -558,34 +565,41 @@ function StatBarRow({ stat }: { stat: MatchStatLine }) {
   const homeFrac = max > 0 ? home / max : 0;
   const awayFrac = max > 0 ? away / max : 0;
 
-  const valStyle: React.CSSProperties = {
+  // The side ahead on this stat gets the primary colour.
+  const homeLead = home > away;
+  const awayLead = away > home;
+  const homeColor = homeLead ? "var(--primary)" : "var(--foreground)";
+  const awayColor = awayLead ? "var(--primary)" : "var(--foreground)";
+
+  const valStyle = (color: string): React.CSSProperties => ({
     fontFamily: "Lexend, sans-serif",
     fontSize: "var(--text-base)",
     fontWeight: "var(--font-weight-bold)",
-    color: "var(--foreground)",
+    color,
     fontVariantNumeric: "tabular-nums",
-  };
+  });
 
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-3">
-        <span style={{ ...valStyle, minWidth: 44, textAlign: "left" }}>{home}{unit}</span>
+        <span style={{ ...valStyle(homeColor), minWidth: 44, textAlign: "left" }}>{home}{unit}</span>
         <span
           className="text-muted-foreground text-center"
           style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-medium)" }}
         >
           {label}
         </span>
-        <span style={{ ...valStyle, minWidth: 44, textAlign: "right" }}>{away}{unit}</span>
+        <span style={{ ...valStyle(awayColor), minWidth: 44, textAlign: "right" }}>{away}{unit}</span>
       </div>
 
-      {/* Center-anchored bars: each side fills outward from the middle */}
+      {/* Center-anchored bars: each side fills outward from the middle; the
+          leading side is highlighted in the primary colour. */}
       <div className="flex items-center gap-1">
         <div className="flex-1 h-1.5 rounded-full relative overflow-hidden" style={{ background: "var(--muted)" }}>
-          <div className="absolute right-0 top-0 h-full rounded-full" style={{ width: `${homeFrac * 100}%`, background: "var(--foreground)" }} />
+          <div className="absolute right-0 top-0 h-full rounded-full" style={{ width: `${homeFrac * 100}%`, background: homeColor }} />
         </div>
         <div className="flex-1 h-1.5 rounded-full relative overflow-hidden" style={{ background: "var(--muted)" }}>
-          <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${awayFrac * 100}%`, background: "var(--foreground)" }} />
+          <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${awayFrac * 100}%`, background: awayColor }} />
         </div>
       </div>
     </div>

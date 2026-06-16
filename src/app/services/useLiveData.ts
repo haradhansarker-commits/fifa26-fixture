@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import type { Match, GroupData, KnockoutRound, MatchDetailData } from "./liveData";
 import {
-  fetchFixtures, fetchStandings, fetchKnockout, fetchMatchDetail, fetchLeaderboards, loadMatches,
-  type LbCategory, type LbEntry,
+  fetchFixtures, fetchStandings, fetchKnockout, fetchMatchDetail, fetchLeaderboards, fetchTeamProfile, loadMatches,
+  type LbCategory, type LbEntry, type TeamProfileData,
 } from "./fifaData";
 
 const EMPTY_LEADERBOARDS: Record<LbCategory, LbEntry[]> = { goals: [], assists: [], shots: [], yellow: [], red: [] };
@@ -55,6 +55,10 @@ export function useMatchDetail(matchId: string): AsyncState<MatchDetailData | un
 
 export function useLeaderboards(): AsyncState<Record<LbCategory, LbEntry[]>> {
   return useAsync(fetchLeaderboards, EMPTY_LEADERBOARDS, []);
+}
+
+export function useTeamProfile(code: string): AsyncState<TeamProfileData | undefined> {
+  return useAsync(() => fetchTeamProfile(code), undefined, [code], 60_000);
 }
 
 // ---- Back-compat thin wrappers (older call sites) ----

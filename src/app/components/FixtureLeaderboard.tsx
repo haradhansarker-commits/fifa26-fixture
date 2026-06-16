@@ -1,4 +1,5 @@
 import { useSearchParams } from "react-router";
+import { motion } from "motion/react";
 import { FixtureList } from "./FixtureList";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { KnockoutBracket } from "./KnockoutBracket";
@@ -65,10 +66,17 @@ export function FixtureLeaderboard() {
       </div>
 
       <main className="flex-1 px-4 py-5">
-        {activeTab === "fixtures" && <FixtureList />}
-        {activeTab === "standings" && <LeaderboardTable />}
-        {activeTab === "knockout" && <KnockoutBracket />}
-        {activeTab === "scorers" && <TopScorers inline />}
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          {activeTab === "fixtures" && <FixtureList />}
+          {activeTab === "standings" && <LeaderboardTable />}
+          {activeTab === "knockout" && <KnockoutBracket />}
+          {activeTab === "scorers" && <TopScorers inline />}
+        </motion.div>
       </main>
     </div>
   );

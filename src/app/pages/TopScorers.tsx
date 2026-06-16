@@ -4,6 +4,7 @@ import { Flag } from "../components/Flag";
 import { PageHeader } from "../components/PageHeader";
 import { useLeaderboards } from "../services/useLiveData";
 import type { LbCategory, LbEntry } from "../services/fifaData";
+import { LeaderboardSkeleton } from "../components/Skeleton";
 
 type CategoryDef = {
   id: LbCategory;
@@ -68,7 +69,7 @@ export function TopScorers({ inline }: { inline?: boolean }) {
       <CategoryPills active={activeId} onChange={setActiveId} />
       <SectionHeader category={active} count={entries.length} />
       {loading && entries.length === 0 ? (
-        <StatusCard text="Loading leaderboard…" />
+        <LeaderboardSkeleton />
       ) : error && entries.length === 0 ? (
         <StatusCard text="Could not load leaderboard from FIFA. Retrying…" />
       ) : (

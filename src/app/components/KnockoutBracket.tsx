@@ -4,6 +4,7 @@ import { Trophy, Medal, Swords, Crown } from "lucide-react";
 import { Flag } from "./Flag";
 import { type KnockoutMatch, type KnockoutSide } from "../services/liveData";
 import { useKnockout } from "../services/useLiveData";
+import { BracketSkeleton } from "./Skeleton";
 
 function roundIcon(title: string) {
   const t = title.toLowerCase();
@@ -16,8 +17,7 @@ function roundIcon(title: string) {
 export function KnockoutBracket() {
   const { data: rounds, loading, error } = useKnockout();
 
-  if (loading && rounds.length === 0)
-    return <p className="text-muted-foreground px-1 py-8 text-center" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}>Loading bracket…</p>;
+  if (loading && rounds.length === 0) return <BracketSkeleton />;
   if (error && rounds.length === 0)
     return <p className="text-muted-foreground px-1 py-8 text-center" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}>Could not load bracket from FIFA. Retrying…</p>;
 
