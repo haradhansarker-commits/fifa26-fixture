@@ -5,6 +5,7 @@ import { Flag } from "./Flag";
 import { type KnockoutMatch, type KnockoutSide } from "../services/liveData";
 import { useKnockout } from "../services/useLiveData";
 import { BracketSkeleton } from "./Skeleton";
+import type { Selection } from "./FixtureList";
 
 function roundIcon(title: string) {
   const t = title.toLowerCase();
@@ -14,15 +15,17 @@ function roundIcon(title: string) {
   return Swords;
 }
 
-export function KnockoutBracket() {
+export function KnockoutBracket({ selection = null }: { selection?: Selection } = {}) {
   const { data: rounds, loading, error } = useKnockout();
 
   if (loading && rounds.length === 0) return <BracketSkeleton />;
   if (error && rounds.length === 0)
     return <p className="text-muted-foreground px-1 py-8 text-center" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}>Could not load bracket from FIFA. Retrying…</p>;
 
+  // Rail (desktop master-detail) stacks rounds in one column; full-width view
+  // spreads them across a responsive grid.
   return (
-    <div className="flex flex-col gap-6">
+    <div className={selection ? "flex flex-col gap-6" : "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start"}>
       {rounds.map((round) => {
         const Icon = roundIcon(round.title);
         return (
@@ -45,7 +48,18 @@ export function KnockoutBracket() {
             {round.matches.map((m, i) => (
               <Fragment key={m.id}>
                 {i > 0 && <div className="h-px bg-border mx-4" />}
-                {m.matchId ? (
+                {m.matchId && selection ? (
+                  <button
+                    type="button"
+                    onClick={() => selection.onSelect(m.matchId!)}
+                    aria-current={selection.selectedId === m.matchId ? "true" : undefined}
+                    className={`block w-full text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
+                      selection.selectedId === m.matchId ? "bg-muted" : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <BracketRow match={m} />
+                  </button>
+                ) : m.matchId ? (
                   <Link to={`/match/${m.matchId}`} className="block hover:bg-muted/40 transition-colors">
                     <BracketRow match={m} />
                   </Link>

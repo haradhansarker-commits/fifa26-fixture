@@ -5,11 +5,19 @@ import { PageHeader, SectionTitle } from "../components/PageHeader";
 import { useTeamProfile } from "../services/useLiveData";
 import type { Match } from "../services/liveData";
 
-export function TeamProfile() {
-  const { code = "" } = useParams();
+export function TeamProfile({ code: codeProp, inline }: { code?: string; inline?: boolean } = {}) {
+  const params = useParams();
+  const code = codeProp ?? params.code ?? "";
   const { data: profile, loading } = useTeamProfile(code);
 
   if (loading && !profile) {
+    if (inline) {
+      return (
+        <p className="text-muted-foreground py-10 text-center" style={{ fontSize: "var(--text-sm)" }}>
+          Loading team…
+        </p>
+      );
+    }
     return (
       <>
         <PageHeader title="Team" />
@@ -23,6 +31,13 @@ export function TeamProfile() {
   }
 
   if (!profile) {
+    if (inline) {
+      return (
+        <p className="text-muted-foreground py-10 text-center" style={{ fontSize: "var(--text-sm)" }}>
+          Team details unavailable.
+        </p>
+      );
+    }
     return (
       <>
         <PageHeader title="Team not found" />
@@ -37,10 +52,8 @@ export function TeamProfile() {
 
   const { team, group, standing, matches } = profile;
 
-  return (
+  const content = (
     <>
-      <PageHeader title={team.name} subtitle={group ?? "FIFA World Cup 2026"} />
-      <main className="flex flex-col gap-5 px-4 pb-8">
         <section className="bg-card border border-border rounded-2xl p-5 flex items-center gap-4">
           <Flag code={team.code} name={team.name} size={56} />
           <div className="flex-1 min-w-0">
@@ -83,7 +96,33 @@ export function TeamProfile() {
             ))}
           </div>
         </section>
-      </main>
+    </>
+  );
+
+  // Inline mode (desktop standings right pane): own heading, no page chrome.
+  if (inline) {
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-foreground truncate" style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-weight-bold)" }}>
+              {team.name}
+            </h2>
+            <p className="text-muted-foreground" style={{ fontSize: "var(--text-sm)" }}>
+              {group ?? "Knockout stage"}
+            </p>
+          </div>
+          {standing && standing.form.length > 0 && <FormBadges form={standing.form} size={18} />}
+        </div>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <PageHeader title={team.name} subtitle={group ?? "FIFA World Cup 2026"} />
+      <main className="flex flex-col gap-5 px-4 pb-8">{content}</main>
     </>
   );
 }

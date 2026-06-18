@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Match, GroupData, KnockoutRound, MatchDetailData } from "./liveData";
 import {
   fetchFixtures, fetchStandings, fetchKnockout, fetchMatchDetail, fetchLeaderboards, fetchTeamProfile, loadMatches,
@@ -10,10 +10,25 @@ const EMPTY_LEADERBOARDS: Record<LbCategory, LbEntry[]> = { goals: [], assists: 
 // Live data from the public FIFA API. See fifaData.ts for endpoints/mapping.
 // Fixtures/knockout poll periodically so in-progress matches refresh.
 
-export type AsyncState<T> = { data: T; loading: boolean; error: string | null };
+export type AsyncState<T> = {
+  data: T;
+  loading: boolean;
+  error: string | null;
+  /** Epoch ms of the last successful load; null until the first one lands. */
+  updatedAt: number | null;
+  /** Force a fresh fetch now (used by manual retry). */
+  refetch: () => void;
+};
 
 function useAsync<T>(loader: () => Promise<T>, initial: T, deps: unknown[], pollMs?: number): AsyncState<T> {
-  const [state, setState] = useState<AsyncState<T>>({ data: initial, loading: true, error: null });
+  const [state, setState] = useState<Omit<AsyncState<T>, "refetch">>({
+    data: initial,
+    loading: true,
+    error: null,
+    updatedAt: null,
+  });
+  // Bumping this re-runs the effect with a forced (cache-busting) load.
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -21,20 +36,25 @@ function useAsync<T>(loader: () => Promise<T>, initial: T, deps: unknown[], poll
     const run = (force = false) => {
       if (force) loadMatches(true);
       loader()
-        .then((data) => alive && setState({ data, loading: false, error: null }))
+        .then((data) => alive && setState((s) => ({ ...s, data, loading: false, error: null, updatedAt: Date.now() })))
         .catch((e) => alive && setState((s) => ({ ...s, loading: false, error: String(e?.message ?? e) })));
     };
 
-    run();
+    run(nonce > 0);
     const timer = pollMs ? setInterval(() => run(true), pollMs) : null;
     return () => {
       alive = false;
       if (timer) clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, nonce]);
 
-  return state;
+  const refetch = useCallback(() => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    setNonce((n) => n + 1);
+  }, []);
+
+  return { ...state, refetch };
 }
 
 export function useFixtures(): AsyncState<Match[]> {

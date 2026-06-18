@@ -16,13 +16,15 @@ const SUBTABS: { id: SubTab; label: string }[] = [
   { id: "stats", label: "Stats" },
 ];
 
-export function MatchDetail() {
-  const { id = "" } = useParams();
+export function MatchDetail({ id: idProp, inline }: { id?: string; inline?: boolean } = {}) {
+  const params = useParams();
+  const id = idProp ?? params.id ?? "";
   const { data, loading } = useMatchDetail(id);
   const watchUrl = useWatchLink(id);
   const [tab, setTab] = useState<SubTab>("events");
 
   if (loading && !data) {
+    if (inline) return <MatchDetailSkeleton />;
     return (
       <>
         <PageHeader title="Match" />
@@ -34,11 +36,18 @@ export function MatchDetail() {
   }
 
   if (!data) {
+    if (inline) {
+      return (
+        <p className="text-muted-foreground py-10 text-center" style={{ fontSize: "var(--text-sm)" }}>
+          Match details unavailable.
+        </p>
+      );
+    }
     return (
       <>
         <PageHeader title="Match not found" />
         <main className="px-4 py-5">
-          <Link to="/" className="text-foreground" style={{ fontFamily: "Lexend, sans-serif", fontSize: "var(--text-sm)" }}>
+          <Link to="/" className="text-foreground" style={{ fontSize: "var(--text-sm)" }}>
             ← Back to fixtures
           </Link>
         </main>
@@ -53,11 +62,8 @@ export function MatchDetail() {
     weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
   });
 
-  return (
+  const content = (
     <>
-      <PageHeader title="Match" />
-      <main className="flex flex-col gap-5 px-4 pb-8">
-
         {/* Hero card */}
         <section className="bg-card border border-border rounded-2xl p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
@@ -106,7 +112,7 @@ export function MatchDetail() {
 
         {/* Sub-tabs */}
         <div
-          className="flex items-center overflow-x-auto -mx-4 px-4 border-b border-border"
+          className="flex items-center overflow-x-auto border-b border-border"
           style={{ scrollbarWidth: "none" } as React.CSSProperties}
         >
           {SUBTABS.map((s) => (
@@ -143,7 +149,16 @@ export function MatchDetail() {
             />
           )}
         </motion.div>
-      </main>
+    </>
+  );
+
+  // Inline mode (desktop right pane): no page chrome, the pane owns the heading.
+  if (inline) return <div className="flex flex-col gap-5">{content}</div>;
+
+  return (
+    <>
+      <PageHeader title="Match" />
+      <main className="flex flex-col gap-5 px-4 pb-8">{content}</main>
     </>
   );
 }

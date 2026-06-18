@@ -6,18 +6,117 @@ import { type GroupData } from "../services/liveData";
 import { useStandings } from "../services/useLiveData";
 import { StandingsSkeleton } from "./Skeleton";
 
-export function LeaderboardTable() {
+export type TeamSelection = { selectedCode?: string; onSelect: (code: string) => void } | null;
+
+export function LeaderboardTable({ teamSelection = null }: { teamSelection?: TeamSelection } = {}) {
   const { data: groups, loading, error } = useStandings();
 
   if (loading && groups.length === 0) return <StandingsSkeleton />;
   if (error && groups.length === 0) return <Note text="Could not load standings from FIFA. Retrying…" />;
 
+  // Rail (desktop master-detail) uses a single column of compact, selectable
+  // group cards; full-width view keeps the detailed responsive-grid tables.
+  if (teamSelection) {
+    return (
+      <div className="flex flex-col gap-6">
+        {groups.map((group) => (
+          <CompactGroup key={group.name} group={group} selection={teamSelection} />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
       {groups.map((group) => (
         <GroupTable key={group.name} group={group} />
       ))}
     </div>
+  );
+}
+
+function GroupHeader({ group }: { group: GroupData }) {
+  return (
+    <div className="flex items-center justify-between px-1">
+      <h2
+        className="text-muted-foreground"
+        style={{
+          fontSize: "var(--text-xs)",
+          fontWeight: "var(--font-weight-semibold)",
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+        }}
+      >
+        {group.name}
+      </h2>
+      <div className="flex items-center gap-1 text-muted-foreground">
+        <Trophy size={12} strokeWidth={1.75} />
+        <span style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-medium)" }}>
+          {group.teams[0]?.name}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Collapsed group card for the narrow standings rail: position bar, flag,
+ *  name + W/D/L/GD subline, played and points — each row selects the team. */
+function CompactGroup({ group, selection }: { group: GroupData; selection: TeamSelection }) {
+  const total = group.teams.length;
+  return (
+    <section className="flex flex-col gap-2">
+      <GroupHeader group={group} />
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div
+          className="flex items-center gap-3 px-4 py-2 text-muted-foreground border-b border-border"
+          style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-medium)" }}
+        >
+          <span className="w-9">#</span>
+          <span className="flex-1">Team</span>
+          <span className="w-6 text-center">P</span>
+          <span className="w-8 text-right pr-1 text-foreground" style={{ fontWeight: "var(--font-weight-semibold)" }}>PTS</span>
+        </div>
+        {group.teams.map((team) => {
+          const gd = team.gf - team.ga;
+          const active = selection?.selectedCode?.toUpperCase() === team.code.toUpperCase();
+          return (
+            <button
+              key={team.id}
+              type="button"
+              onClick={() => selection?.onSelect(team.code)}
+              aria-current={active ? "true" : undefined}
+              className={`flex w-full items-center gap-3 px-4 py-3 text-left border-t border-border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
+                active ? "bg-muted" : "hover:bg-muted/40"
+              }`}
+            >
+              <span className="flex items-center gap-2 w-9 shrink-0">
+                <span className="w-1 h-6 rounded-full" style={{ background: rankColor(team.position, total) }} />
+                <span className="text-foreground" style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-weight-semibold)" }}>
+                  {team.position}
+                </span>
+              </span>
+              <span className="flex items-center gap-2 flex-1 min-w-0">
+                <Flag code={team.code} name={team.name} size={20} />
+                <span className="flex flex-col min-w-0">
+                  <span className="text-foreground truncate" style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-semibold)" }}>
+                    {team.name}
+                  </span>
+                  <span className="text-muted-foreground truncate tabular-nums" style={{ fontSize: "10px" }}>
+                    {team.won}W · {team.drawn}D · {team.lost}L · GD {gd > 0 ? `+${gd}` : gd}
+                  </span>
+                </span>
+              </span>
+              <span className="w-6 text-center text-muted-foreground tabular-nums" style={{ fontSize: "var(--text-sm)" }}>
+                {team.played}
+              </span>
+              <span className="w-8 text-right pr-1 text-foreground tabular-nums" style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-bold)" }}>
+                {team.points}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
