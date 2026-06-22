@@ -1,0 +1,7 @@
+{
+  "_readme": "Map match IDs to FIFA highlight YouTube videos. Value can be a video id (e.g. 'dQw4w9WgXcQ'), a youtube.com/watch?v=… URL, or a youtu.be/… short URL. Configured matches embed in-app; unconfigured ones fall back to a YouTube search.",
+  "matches": {
+    "1": "",
+    "2": ""
+  }
+}

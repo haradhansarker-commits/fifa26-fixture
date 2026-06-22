@@ -106,3 +106,45 @@ export function useWatchLink(matchId: string): string | null {
 
   return url;
 }
+
+export type HighlightLink = {
+  /** YouTube video id, when a specific highlight reel is configured (embeddable). */
+  videoId: string | null;
+  /** Always-available fallback: a prefilled YouTube search for this fixture. */
+  searchUrl: string;
+};
+
+// Accepts a bare id, a youtube.com/watch?v= URL, or a youtu.be/ short URL.
+function parseYouTubeId(raw: string): string | null {
+  if (!raw) return null;
+  if (/^[\w-]{11}$/.test(raw)) return raw;
+  const m = raw.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Reads /highlights.json — map match ids to YouTube highlight video ids/URLs.
+// Falls back to a YouTube search built from the fixture so the button always
+// leads somewhere even when no exact reel is configured. Team names are optional
+// so this can be called before the match detail has loaded (rules of hooks).
+export function useHighlightLink(matchId: string, homeName?: string, awayName?: string): HighlightLink {
+  const [videoId, setVideoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/highlights.json")
+      .then((r) => r.json())
+      .then((cfg: { matches?: Record<string, string> }) => {
+        if (alive) setVideoId(parseYouTubeId(cfg.matches?.[matchId] ?? ""));
+      })
+      .catch(() => alive && setVideoId(null));
+    return () => {
+      alive = false;
+    };
+  }, [matchId]);
+
+  const teams = homeName && awayName ? `${homeName} vs ${awayName} ` : "";
+  const query = `FIFA World Cup 2026 ${teams}highlights`;
+  const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+
+  return { videoId, searchUrl };
+}

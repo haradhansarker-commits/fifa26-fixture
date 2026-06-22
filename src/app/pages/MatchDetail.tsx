@@ -1,10 +1,11 @@
 import { useParams, Link } from "react-router";
 import { useState, useEffect } from "react";
-import { Goal, Flag as FlagIcon, RefreshCw, Square, MapPin, Tv } from "lucide-react";
+import { Goal, Flag as FlagIcon, RefreshCw, Square, MapPin, Tv, Youtube } from "lucide-react";
 import { Flag } from "../components/Flag";
 import { PageHeader } from "../components/PageHeader";
+import { HighlightsModal } from "../components/HighlightsModal";
 import { motion } from "motion/react";
-import { useMatchDetail, useWatchLink } from "../services/useLiveData";
+import { useMatchDetail, useWatchLink, useHighlightLink } from "../services/useLiveData";
 import type { MatchEvent, MatchStatLine, LineupPlayer } from "../services/liveData";
 import { MatchDetailSkeleton } from "../components/Skeleton";
 
@@ -21,7 +22,9 @@ export function MatchDetail({ id: idProp, inline }: { id?: string; inline?: bool
   const id = idProp ?? params.id ?? "";
   const { data, loading } = useMatchDetail(id);
   const watchUrl = useWatchLink(id);
+  const highlight = useHighlightLink(id, data?.match.homeTeam.name, data?.match.awayTeam.name);
   const [tab, setTab] = useState<SubTab>("events");
+  const [highlightsOpen, setHighlightsOpen] = useState(false);
 
   if (loading && !data) {
     if (inline) return <MatchDetailSkeleton />;
@@ -57,6 +60,7 @@ export function MatchDetail({ id: idProp, inline }: { id?: string; inline?: bool
 
   const { match, venue, homeFormation, awayFormation, homeLineup, awayLineup, events, stats } = data;
   const isLive = match.status === "live";
+  const isFinished = match.status === "finished";
 
   const dateLong = new Date(match.startingAtISO).toLocaleString(undefined, {
     weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
@@ -108,6 +112,20 @@ export function MatchDetail({ id: idProp, inline }: { id?: string; inline?: bool
               </span>
             </a>
           )}
+
+          {/* Watch highlights — finished matches open the YouTube reel in-app */}
+          {isFinished && (
+            <button
+              type="button"
+              onClick={() => setHighlightsOpen(true)}
+              className="flex items-center justify-center gap-2 w-full rounded-xl py-3 border border-border transition-colors hover:bg-muted outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              <Youtube size={16} style={{ color: "var(--live)" }} strokeWidth={2} aria-hidden />
+              <span className="text-foreground" style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-weight-semibold)" }}>
+                Watch highlights
+              </span>
+            </button>
+          )}
         </section>
 
         {/* Sub-tabs */}
@@ -149,6 +167,14 @@ export function MatchDetail({ id: idProp, inline }: { id?: string; inline?: bool
             />
           )}
         </motion.div>
+
+        <HighlightsModal
+          open={highlightsOpen}
+          onClose={() => setHighlightsOpen(false)}
+          title={`${match.homeTeam.name} ${match.homeScore ?? 0}–${match.awayScore ?? 0} ${match.awayTeam.name} · Highlights`}
+          videoId={highlight.videoId}
+          searchUrl={highlight.searchUrl}
+        />
     </>
   );
 
